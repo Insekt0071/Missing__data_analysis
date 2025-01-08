@@ -48,7 +48,7 @@ X_test = pd.get_dummies(X_test, drop_first=True)
 X_test = X_test.reindex(columns=X_train.columns, fill_value=0)
 
 # Trenowanie modelu XGBoost
-model = XGBRegressor(random_state=42, n_estimators=5000, learning_rate=0.001)
+model = XGBRegressor(random_state=42, n_estimators=100, learning_rate=0.1)
 model.fit(X_train, y_train)
 
 # Predykcja na danych testowych

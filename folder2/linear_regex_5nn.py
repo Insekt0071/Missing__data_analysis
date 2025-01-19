@@ -1,8 +1,57 @@
 import pandas as pd
 import numpy as np
-from xgboost import XGBRegressor
+from sklearn.linear_model import LinearRegression
 from sklearn.impute import KNNImputer
 from sklearn.preprocessing import StandardScaler
+import re
+
+
+def deduce_from_title(df):
+    df_copy = df.copy()
+
+    # Funkcja do wyciągania liczb z tekstu
+    def extract_first_number(text):
+        if not isinstance(text, str):
+            return None
+        numbers = re.findall(r'\d+', text)
+        return float(numbers[0]) if numbers else None
+
+    # 1. Imputacja flat_area
+    area_pattern = r'\b(\d+)\s*m[²2\s]'
+    mask_area = df_copy['flat_area'].isnull()
+    for idx in df_copy[mask_area].index:
+        title = df_copy.loc[idx, 'ad_title']
+        if isinstance(title, str):
+            match = re.search(area_pattern, title)
+            if match:
+                df_copy.loc[idx, 'flat_area'] = float(match.group(1))
+
+    # 2 & 3. Imputacja flat_rooms
+    rooms_patterns = [
+        (r'\b(\d+)[-\s]?(?:pok|pomieszcz|pokojowe|pokoi)\w*', lambda x: float(x)),
+        (r'\bkawalerk[ai]\b', lambda x: 1.0)
+    ]
+
+    mask_rooms = df_copy['flat_rooms'].isnull()
+    for idx in df_copy[mask_rooms].index:
+        title = df_copy.loc[idx, 'ad_title']
+        if isinstance(title, str):
+            for pattern, transform in rooms_patterns:
+                match = re.search(pattern, title.lower())
+                if match:
+                    value = transform(match.group(1)) if match.groups() else transform(None)
+                    df_copy.loc[idx, 'flat_rooms'] = value
+                    break
+
+    # 4. Imputacja flat_furnished
+    furnished_pattern = r'\bumeblowane?\b'
+    mask_furnished = df_copy['flat_furnished'].isnull()
+    for idx in df_copy[mask_furnished].index:
+        title = df_copy.loc[idx, 'ad_title']
+        if isinstance(title, str) and re.search(furnished_pattern, title.lower()):
+            df_copy.loc[idx, 'flat_furnished'] = True
+
+    return df_copy
 
 
 def clean_outliers(df):
@@ -18,9 +67,13 @@ def clean_outliers(df):
 
 
 def prepare_data_with_aligned_categories(train_df, test_df, target_col=None):
-    # Utworzenie kopii dataframe'ów
-    train = train_df.copy()
-    test = test_df.copy()
+    # Najpierw wykonujemy imputację dedukcyjną
+    train = deduce_from_title(train_df)
+    test = deduce_from_title(test_df)
+
+    # Czyszczenie outlierów
+    train = clean_outliers(train)
+    test = clean_outliers(test)
 
     # Usunięcie kolumn, których nie chcemy używać
     columns_to_drop = ["id", "ad_title", "date_activ", "date_modif", "date_expire"]
@@ -107,29 +160,15 @@ def prepare_data_with_aligned_categories(train_df, test_df, target_col=None):
 train_data = pd.read_csv('../data/pzn-rent-train.csv')
 test_data = pd.read_csv('../data/pzn-rent-test.csv')
 
-# Przygotowanie danych z poprawną obsługą kategorii
+# Przygotowanie danych
 X_train, X_test, y_train = prepare_data_with_aligned_categories(
     train_data,
     test_data,
     target_col='price'
 )
 
-# Parametry XGBoost
-xgb_params = {
-    'n_estimators': 1000,
-    'max_depth': 6,
-    'learning_rate': 0.01,
-    'reg_alpha': 0.1,
-    'reg_lambda': 1.0,
-    'min_child_weight': 5,
-    'subsample': 0.8,
-    'colsample_bytree': 0.8,
-    'objective': 'reg:squarederror',
-    'random_state': 42
-}
-
-# Trenowanie modelu
-model = XGBRegressor(**xgb_params)
+# Trenowanie modelu regresji liniowej
+model = LinearRegression()
 model.fit(X_train, y_train)
 
 # Predykcja
@@ -137,4 +176,4 @@ predictions = model.predict(X_test)
 
 # Zapis wyników
 output = pd.DataFrame({"ID": range(1, len(predictions) + 1), "TARGET": predictions})
-output.to_csv("../data/pzn_xgboost_5nn.csv", index=False)
+output.to_csv("../data/pzn_linear_regression_5nn_deductive.csv", index=False)

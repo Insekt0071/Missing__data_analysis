@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from xgboost import XGBRegressor
+from sklearn.linear_model import LinearRegression
 from sklearn.impute import KNNImputer
 from sklearn.preprocessing import StandardScaler
 
@@ -107,29 +107,15 @@ def prepare_data_with_aligned_categories(train_df, test_df, target_col=None):
 train_data = pd.read_csv('../data/pzn-rent-train.csv')
 test_data = pd.read_csv('../data/pzn-rent-test.csv')
 
-# Przygotowanie danych z poprawną obsługą kategorii
+# Przygotowanie danych
 X_train, X_test, y_train = prepare_data_with_aligned_categories(
     train_data,
     test_data,
     target_col='price'
 )
 
-# Parametry XGBoost
-xgb_params = {
-    'n_estimators': 1000,
-    'max_depth': 6,
-    'learning_rate': 0.01,
-    'reg_alpha': 0.1,
-    'reg_lambda': 1.0,
-    'min_child_weight': 5,
-    'subsample': 0.8,
-    'colsample_bytree': 0.8,
-    'objective': 'reg:squarederror',
-    'random_state': 42
-}
-
-# Trenowanie modelu
-model = XGBRegressor(**xgb_params)
+# Trenowanie modelu regresji liniowej
+model = LinearRegression()
 model.fit(X_train, y_train)
 
 # Predykcja
@@ -137,4 +123,4 @@ predictions = model.predict(X_test)
 
 # Zapis wyników
 output = pd.DataFrame({"ID": range(1, len(predictions) + 1), "TARGET": predictions})
-output.to_csv("../data/pzn_xgboost_5nn.csv", index=False)
+output.to_csv("../data/pzn_linear_regression_5nn.csv", index=False)
